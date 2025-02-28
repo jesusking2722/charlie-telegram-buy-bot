@@ -74,5 +74,5 @@ const checkPresaleUpdates = async () => {
 
 // Auto-check every 20 seconds for new purchases
 initializeTotalTokensSold().then(() => {
-  setInterval(checkPresaleUpdates, 10000);
+  setInterval(checkPresaleUpdates, 20000);
 });
