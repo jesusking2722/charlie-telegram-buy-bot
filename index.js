@@ -18,10 +18,10 @@ const checkPresaleUpdates = async () => {
       await checkSolanaBuy();
 
     // Fetch presale data
-    const { userBought, changesDetected } = await checkEthBuy();
+    const { userBought, changesEth } = await checkEthBuy();
 
-    if (changeSolana || changesDetected) {
-      // If a new purchase is detected (changesDetected becomes true)
+    if (changeSolana || changesEth) {
+      // If a new purchase is detected (changesEth becomes true)
       let message = "";
       let solanaMessage = "";
       let ethMessage = "";
@@ -35,7 +35,7 @@ const checkPresaleUpdates = async () => {
       }
       const { totalAmount, totalUsers, totalSoldPrice } = await fetchData();
       const { currentPrice, nextPrice } = await fetchPrices();
-      if (changesDetected) {
+      if (changesEth) {
         const priceUSD = (userBought * parseFloat(currentPrice))
           .toFixed(2)
           .toString();
@@ -66,6 +66,7 @@ const checkPresaleUpdates = async () => {
       });
       console.log("✅ Purchase detected: Notification sent.");
     }
+    console.log(changeSolana, changesEth);
   } catch (error) {
     console.error("Error checking presale updates:", error);
   }

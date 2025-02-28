@@ -51,11 +51,12 @@ const checkSolanaBuy = async () => {
 
     if (previousSolanaTxCount === null) {
       previousSolanaTxCount = rows.length;
+      console.log("solana tx records: ", rows.length);
       return { changeSolana: false };
     }
 
     const changeSolana = previousSolanaTxCount < rows.length;
-
+    console.log("solana tx records: ", rows.length);
     return {
       changeSolana,
       solanaBoughtTokens: rows[rows.length - 1].tokens,
@@ -114,17 +115,17 @@ const checkEthBuy = async () => {
     // If `previousTotalTokensSold` is null (first run), initialize it without sending a message
     if (previousTotalTokensSold === null) {
       previousTotalTokensSold = totalTokensSold;
-      return { changesDetected: false };
+      return { changesEth: false };
     }
 
     // Detect changes
     if (totalTokensSold > previousTotalTokensSold) {
       userBought = totalTokensSold - previousTotalTokensSold;
     }
-    const changesDetected = totalTokensSold > previousTotalTokensSold;
+    const changesEth = totalTokensSold > previousTotalTokensSold;
     previousTotalTokensSold = totalTokensSold; // Update the previous value
 
-    return { changesDetected, userBought };
+    return { changesEth, userBought };
   } catch (error) {
     console.log("check buy error: ", error);
   }
