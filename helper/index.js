@@ -6,6 +6,14 @@ const axios = require("axios");
 let previousTotalTokensSold = null;
 let previousSolanaTxCount = null;
 
+const formatPrice = (price) => {
+  return parseFloat(price.toFixed(5)).toString();
+};
+
+function formatNumberWithSpaces(number) {
+  return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+}
+
 const checkSolanaBuy = async () => {
   try {
     const URL = `https://docs.google.com/spreadsheets/d/${process.env.SHEET_ID}/gviz/tq?tqx=out:json`;
@@ -54,46 +62,28 @@ const checkSolanaBuy = async () => {
       console.log("solana tx records: ", rows.length);
       return { changeSolana: false };
     }
+    if (rows) {
+      let totalSolanaToken = 0;
+      let totalSolanaTokenUSD = 0;
+      const changeSolana = previousSolanaTxCount < rows.length;
+      for (const i = 13; i < rows.length; i++) {
+        totalSolanaToken += rows[i].tokens;
+        totalSolanaTokenUSD += rows[i].usd;
+      }
+      console.log("solana tx records: ", rows.length);
+      return {
+        totalSolanaToken,
+        totalSolanaTokenUSD,
+        changeSolana,
+        solanaBoughtTokens: rows[rows.length - 1].tokens,
+        solanaBoughtUsd: rows[rows.length - 1].usd,
+      };
+    }
 
-    const changeSolana = previousSolanaTxCount < rows.length;
-    console.log("solana tx records: ", rows.length);
-    return {
-      changeSolana,
-      solanaBoughtTokens: rows[rows.length - 1].tokens,
-      solanaBoughtUsd: rows[rows.length - 1].usd,
-    };
-
-    return rows;
+    return { changeSolana: false };
   } catch (error) {
     console.error("Error fetching Google Sheet:", error.message);
     return [];
-  }
-};
-
-const formatPrice = (price) => {
-  return parseFloat(price.toFixed(5)).toString();
-};
-
-function formatNumberWithSpaces(number) {
-  return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-}
-
-const initializeTotalTokensSold = async () => {
-  try {
-    let totalTokensSold = 0;
-    for (const network of NETWORKS) {
-      const provider = new ethers.JsonRpcProvider(network.rpcUrl);
-      const contract = new ethers.Contract(
-        network.contractAddress,
-        PRESALE_ABI,
-        provider
-      );
-      const tokensSold = await contract.totalTokensSold();
-      totalTokensSold += parseFloat(ethers.formatUnits(tokensSold, 18));
-    }
-    previousTotalTokensSold = totalTokensSold; // Set the initial value
-  } catch (error) {
-    console.error("Error initializing totalTokensSold:", error);
   }
 };
 
@@ -101,6 +91,11 @@ const checkEthBuy = async () => {
   try {
     let totalTokensSold = 0;
     let userBought = 0;
+    let currentPrice = 0;
+    let nextPrice = 0;
+    let totalUsers = 0;
+    let pricePerToken = 0;
+
     for (const network of NETWORKS) {
       const provider = new ethers.JsonRpcProvider(network.rpcUrl);
       const contract = new ethers.Contract(
@@ -108,66 +103,17 @@ const checkEthBuy = async () => {
         PRESALE_ABI,
         provider
       );
-      const tokensSold = await contract.totalTokensSold();
-      totalTokensSold += parseFloat(ethers.formatUnits(tokensSold, 18));
-    }
 
-    // If `previousTotalTokensSold` is null (first run), initialize it without sending a message
-    if (previousTotalTokensSold === null) {
-      previousTotalTokensSold = totalTokensSold;
-      return { changesEth: false };
-    }
+      // Fetch prices
+      const cs = await contract.currentStage();
+      const cp = await contract.stagePrices(Number(cs) - 1);
+      const np = await contract.stagePrices(Number(cs));
 
-    // Detect changes
-    if (totalTokensSold > previousTotalTokensSold) {
-      userBought = totalTokensSold - previousTotalTokensSold;
-    }
-    const changesEth = totalTokensSold > previousTotalTokensSold;
-    previousTotalTokensSold = totalTokensSold; // Update the previous value
-
-    return { changesEth, userBought };
-  } catch (error) {
-    console.log("check buy error: ", error);
-  }
-};
-
-const fetchPrices = async () => {
-  try {
-    const provider = new ethers.JsonRpcProvider(NETWORKS[3].rpcUrl);
-    const contract = new ethers.Contract(
-      NETWORKS[3].contractAddress,
-      PRESALE_ABI,
-      provider
-    );
-    const cs = await contract.currentStage();
-    const cp = await contract.stagePrices(Number(cs) - 1);
-    const np = await contract.stagePrices(Number(cs));
-
-    const currentPrice = formatPrice(
-      parseFloat(1 / parseFloat(ethers.formatUnits(cp, 18)))
-    );
-    const nextPrice = formatPrice(
-      parseFloat(1 / parseFloat(ethers.formatUnits(np, 18)))
-    );
-
-    return { currentPrice, nextPrice };
-  } catch (error) {
-    console.error("fetch price error:", error);
-  }
-};
-
-const fetchData = async () => {
-  try {
-    let totalUsers = 0;
-    let pricePerToken = 0;
-    let totalTokensSold = 0;
-
-    for (const network of NETWORKS) {
-      const provider = new ethers.JsonRpcProvider(network.rpcUrl);
-      const contract = new ethers.Contract(
-        network.contractAddress,
-        PRESALE_ABI,
-        provider
+      currentPrice = formatPrice(
+        parseFloat(1 / parseFloat(ethers.formatUnits(cp, 18)))
+      );
+      nextPrice = formatPrice(
+        parseFloat(1 / parseFloat(ethers.formatUnits(np, 18)))
       );
 
       // Fetch total users
@@ -179,17 +125,33 @@ const fetchData = async () => {
       const tokensPerUSD = ethers.formatUnits(perDollarPrice, 18);
       pricePerToken = 1 / parseFloat(tokensPerUSD);
 
-      // Fetch total tokens sold
       const tokensSold = await contract.totalTokensSold();
       totalTokensSold += parseFloat(ethers.formatUnits(tokensSold, 18));
     }
 
+    // If `previousTotalTokensSold` is null (first run), initialize it without sending a message
+    if (previousTotalTokensSold === null) {
+      previousTotalTokensSold = totalTokensSold;
+      return { changesEth: false };
+    }
+
+    if (previousTotalTokensSold > totalTokensSold) {
+      return { changesEth: false };
+    }
+
+    // Detect changes
+    const changesEth = totalTokensSold > previousTotalTokensSold;
+    userBought = totalTokensSold - previousTotalTokensSold;
+    previousTotalTokensSold = totalTokensSold; // Update the previous value
+
+    const totalTokensSoldReSum = 14031.11 * 5000 + parseFloat(totalTokensSold);
     const totalSoldPrice = (totalTokensSold * pricePerToken + 14031.11).toFixed(
       2
     );
 
-    const totalTokensSoldReSum =
-      14031.11 * (1 / pricePerToken) + parseFloat(totalTokensSold);
+    console.log("check eth buy: ", "new total token : ", totalTokensSold);
+    console.log("old token amount: ", previousTotalTokensSold);
+    console.log("user bought: ", userBought);
 
     return {
       totalAmount: formatNumberWithSpaces(
@@ -199,17 +161,18 @@ const fetchData = async () => {
       totalSoldPrice: formatNumberWithSpaces(
         parseFloat(totalSoldPrice).toString()
       ),
-      pricePerToken: parseFloat(pricePerToken).toString(),
+      changesEth,
+      userBought,
+      currentPrice,
+      nextPrice,
     };
   } catch (error) {
-    console.error("fetch allocations error:", error);
+    console.log("check buy error: ", error);
   }
 };
 
 module.exports = {
-  initializeTotalTokensSold,
+  formatNumberWithSpaces,
   checkEthBuy,
-  fetchData,
-  fetchPrices,
   checkSolanaBuy,
 };
